@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>P2P WebRTC Online Calling System</title>
+    <title>P2P WebRTC Call Hub</title>
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <style>
         :root {
@@ -11,10 +11,9 @@
             --primary-hover: #4338ca;
             --success: #16a34a;
             --danger: #dc2626;
-            --dark: #1f2937;
+            --dark: #111827;
             --light: #f3f4f6;
-            /* Dynamic scale factor calculated by JS */
-            --scale-factor: 1; 
+            --scale-factor: 1; /* Scaled dynamically by the resize agent */
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
@@ -32,10 +31,10 @@
             width: 100%; 
             max-width: 1000px; 
             background: #1e293b; 
-            padding: calc(25px * var(--scale-factor)); 
+            padding: calc(24px * var(--scale-factor)); 
             border-radius: calc(12px * var(--scale-factor)); 
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); 
-            transition: all 0.2s ease-out;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.4); 
+            transition: all 0.15s ease-out;
         }
         
         header { 
@@ -50,12 +49,26 @@
         
         .id-badge { 
             background: #334155; 
-            padding: calc(8px * var(--scale-factor)) calc(15px * var(--scale-factor)); 
+            padding: calc(6px * var(--scale-factor)) calc(12px * var(--scale-factor)); 
             border-radius: 20px; 
             font-weight: bold; 
-            font-size: calc(0.95rem * var(--scale-factor)); 
+            font-size: calc(0.9rem * var(--scale-factor)); 
         }
         .id-num { color: #f43f5e; letter-spacing: 1px; }
+
+        .permission-banner {
+            background: #1e1b4b;
+            border: 1px solid #4338ca;
+            padding: calc(12px * var(--scale-factor));
+            border-radius: calc(8px * var(--scale-factor));
+            margin-bottom: calc(15px * var(--scale-factor));
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+        .permission-banner span { font-size: calc(0.85rem * var(--scale-factor)); color: #c7d2fe; }
+        .btn-perm { width: auto; padding: 6px 15px; font-size: calc(0.8rem * var(--scale-factor)); margin-bottom: 0; }
 
         .main-layout { 
             display: grid; 
@@ -63,24 +76,30 @@
             gap: calc(20px * var(--scale-factor)); 
         }
         
-        /* Mobile Portrait & Small Screens optimization */
         @media(max-width: 768px) { 
             .main-layout { grid-template-columns: 1fr; } 
         }
 
         .panel { 
-            background: #111827; 
+            background: var(--dark); 
             padding: calc(15px * var(--scale-factor)); 
             border-radius: calc(8px * var(--scale-factor)); 
             border: 1px solid #334155; 
             margin-bottom: calc(15px * var(--scale-factor));
         }
         h2 { 
-            font-size: calc(1.1rem * var(--scale-factor)); 
-            margin-bottom: calc(15px * var(--scale-factor)); 
+            font-size: calc(1.05rem * var(--scale-factor)); 
+            margin-bottom: calc(12px * var(--scale-factor)); 
             color: #94a3b8; 
             border-bottom: 1px solid #1f2937; 
             padding-bottom: calc(5px * var(--scale-factor)); 
+        }
+
+        label {
+            display: block;
+            font-size: calc(0.8rem * var(--scale-factor));
+            color: #94a3b8;
+            margin-bottom: 4px;
         }
 
         input, button, select { 
@@ -88,12 +107,12 @@
             padding: calc(10px * var(--scale-factor)); 
             margin-bottom: calc(10px * var(--scale-factor)); 
             border-radius: calc(6px * var(--scale-factor)); 
-            font-size: calc(0.95rem * var(--scale-factor));
+            font-size: calc(0.9rem * var(--scale-factor));
             border: none; 
             outline: none; 
         }
         input, select { background: #1f2937; color: white; border: 1px solid #475569; }
-        button { background: var(--primary); color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button { background: var(--primary); color: white; font-weight: bold; cursor: pointer; transition: 0.15s; }
         button:hover { background: var(--primary-hover); }
         
         .btn-call { background: var(--success); }
@@ -102,9 +121,9 @@
         .btn-hangup:hover { background: #b91c1c; }
 
         .list-container { 
-            max-height: calc(180px * var(--scale-factor)); 
+            max-height: calc(160px * var(--scale-factor)); 
             overflow-y: auto; 
-            margin-top: calc(10px * var(--scale-factor)); 
+            margin-top: calc(8px * var(--scale-factor)); 
         }
         .list-item { 
             display: flex; 
@@ -114,11 +133,10 @@
             padding: calc(8px * var(--scale-factor)) calc(12px * var(--scale-factor)); 
             margin-bottom: calc(6px * var(--scale-factor)); 
             border-radius: calc(4px * var(--scale-factor)); 
-            font-size: calc(0.9rem * var(--scale-factor)); 
+            font-size: calc(0.85rem * var(--scale-factor)); 
         }
-        .list-item button { width: auto; margin: 0; padding: 4px 10px; font-size: calc(0.8rem * var(--scale-factor)); }
+        .list-item button { width: auto; margin: 0; padding: 4px 8px; font-size: calc(0.75rem * var(--scale-factor)); }
 
-        /* Resizing video panel box */
         .video-box { 
             text-align: center; 
             margin-bottom: calc(15px * var(--scale-factor)); 
@@ -126,7 +144,7 @@
             border-radius: calc(8px * var(--scale-factor)); 
             overflow: hidden; 
             position: relative; 
-            height: calc(240px * var(--scale-factor)); 
+            height: calc(230px * var(--scale-factor)); 
         }
         video { width: 100%; height: 100%; object-fit: cover; }
         .local-video-small { 
@@ -147,7 +165,7 @@
             border-radius: calc(6px * var(--scale-factor)); 
             font-weight: bold; 
             background: #334155; 
-            font-size: calc(0.9rem * var(--scale-factor)); 
+            font-size: calc(0.85rem * var(--scale-factor)); 
         }
         .incoming-ui { 
             display: none; 
@@ -170,8 +188,13 @@
         <div class="id-badge">Your ID: <span id="my-id-display" class="id-num">Initializing...</span></div>
     </header>
 
+    <div class="permission-banner" id="perm-banner">
+        <span>Enable desktop and mobile notifications to receive calls when in background.</span>
+        <button class="btn-perm" onclick="requestPermission()">Allow Notifications</button>
+    </div>
+
     <div class="incoming-ui" id="incoming-panel">
-        <div id="incoming-msg">Incoming Call from 0000...</div>
+        <div id="incoming-msg">Incoming Call...</div>
         <div class="inc-buttons">
             <button class="btn-call" onclick="answerCall()">Answer</button>
             <button class="btn-hangup" style="display:inline-block;" onclick="rejectCall()">Decline</button>
@@ -182,7 +205,7 @@
 
     <div class="main-layout">
         <div>
-            <div class="video-box" id="video-container">
+            <div class="video-box">
                 <video id="remote-video" autoplay playsinline></video>
                 <video id="local-video" class="local-video-small" autoplay playsinline muted></video>
             </div>
@@ -193,6 +216,23 @@
                 <button class="btn-call" id="btn-dial" onclick="startCall()">Dial</button>
                 <button class="btn-hangup" id="btn-hangup" onclick="hangUp()">Hang Up</button>
             </div>
+            
+            <div class="panel" id="ringtone-panel">
+                <h2>Ringtone Settings (Android & Desktop Only)</h2>
+                <label for="ringtone-select">Choose Sound Profile</label>
+                <select id="ringtone-select">
+                    <option value="classic">Retro Telephone Ring</option>
+                    <option value="pulse">Space Pulsar</option>
+                    <option value="beacon">Sonar Beacon</option>
+                    <option value="chirp">Techno Bird Chirp</option>
+                    <option value="melody">Synthesizer Arpeggio</option>
+                    <option value="siren">Emergency Pulse</option>
+                    <option value="digital">Digital Clock Alarm</option>
+                    <option value="harmonic">Zen Harmonic</option>
+                    <option value="marimba">Electro Marimba</option>
+                    <option value="bounce">Bouncy Synthesizer</option>
+                </select>
+            </div>
         </div>
 
         <div>
@@ -200,7 +240,7 @@
                 <h2>Add Contact</h2>
                 <div style="display: flex; gap: 5px;">
                     <input type="text" id="contact-name" placeholder="Name" style="flex: 2;">
-                    <input type="text" id="contact-id" placeholder="4-Digit ID" maxlength="4" style="flex: 1;">
+                    <input type="text" id="contact-id" placeholder="ID" maxlength="4" style="flex: 1;">
                 </div>
                 <button onclick="addContact()">Save Contact</button>
                 
@@ -216,124 +256,126 @@
 </div>
 
 <script>
-    // System Constants & App Namespace Prefix
     const APP_PREFIX = "rtc-call-sys-";
     
     let peer;
     let localStream;
     let currentCall = null;
     let incomingCallInstance = null;
-    let audioContext = null;
+    let audioCtx = null;
     let ringtoneInterval = null;
 
-    // --- Dynamic Resizing Agent ---
-    // Calculates a dynamic scaling factor based on the browser window size
-    function resizeAgent() {
-        const width = window.innerWidth;
-        let scale = 1;
-        
-        if (width < 480) {
-            scale = 0.82; // Compact UI for small mobile phones
-        } else if (width >= 480 && width < 768) {
-            scale = 0.9;  // Medium-sized mobile & small tablets
-        } else if (width >= 768 && width < 1024) {
-            scale = 0.95; // Tablets & small laptop screens
+    // Detect Apple device (iOS/macOS browser stack)
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    // Dynamic Scaling Handler
+    function runResizeAgent() {
+        const w = window.innerWidth;
+        let scale = 1.0;
+        if (w < 480) {
+            scale = 0.8;
+        } else if (w < 768) {
+            scale = 0.9;
+        } else if (w < 1024) {
+            scale = 0.95;
         } else {
-            scale = 1.05; // Larger displays
+            scale = 1.05;
         }
-        
         document.documentElement.style.setProperty('--scale-factor', scale);
     }
-    
-    window.addEventListener('resize', resizeAgent);
-    window.addEventListener('DOMContentLoaded', resizeAgent);
+    window.addEventListener('resize', runResizeAgent);
+    window.addEventListener('DOMContentLoaded', runResizeAgent);
 
-    // --- Notification Permissions Setup ---
-    function requestNotificationPermission() {
-        if ("Notification" in window) {
-            if (Notification.permission !== "granted" && Notification.permission !== "denied") {
-                Notification.requestPermission();
-            }
-        }
-    }
-
-    // Sends system-level notification (triggers a "ding" sound on iOS/macOS/Android natively)
-    function dispatchCallNotification(callerId) {
-        if ("Notification" in window && Notification.permission === "granted") {
-            const contactName = getContactName(callerId);
-            const title = "Incoming P2P Call";
-            const options = {
-                body: `${contactName} (ID: ${callerId}) is calling you...`,
-                tag: 'incoming-p2p-call', // Overwrite old calls
-                requireInteraction: true,  // Keeps notification visible
-                silent: false              // Allows device system sound (ding on iOS)
-            };
-            
-            try {
-                new Notification(title, options);
-            } catch (e) {
-                // Support background service workers if registered in future extensions
-                navigator.serviceWorker?.ready.then(registration => {
-                    registration.showNotification(title, options);
-                });
-            }
-        }
-    }
-
-    // Help resolve Caller ID to saved Contact Names for UI/Notifications
-    function getContactName(id) {
-        const found = contacts.find(c => c.id === id);
-        return found ? found.name : "Unknown Caller";
-    }
-
-    // Load or generate a permanent 4-digit ID
-    let myPermanentId = localStorage.getItem('phone_p2p_id');
-    if (!myPermanentId) {
-        myPermanentId = Math.floor(1000 + Math.random() * 9000).toString();
-        localStorage.setItem('phone_p2p_id', myPermanentId);
-    }
+    // Storage and Device Identity
+    let myPermanentId = localStorage.getItem('phone_p2p_id') || Math.floor(1000 + Math.random() * 9000).toString();
+    localStorage.setItem('phone_p2p_id', myPermanentId);
     document.getElementById('my-id-display').innerText = myPermanentId;
 
-    // Initialize lists from localStorage
     let contacts = JSON.parse(localStorage.getItem('phone_contacts')) || [];
     let callHistory = JSON.parse(localStorage.getItem('phone_history')) || [];
 
-    // Initialize PeerJS Connection
+    // Notification Access Gatekeeper
+    function checkNotificationStatus() {
+        if (!("Notification" in window)) {
+            document.getElementById('perm-banner').style.display = 'none';
+            return;
+        }
+        if (Notification.permission === 'granted' || Notification.permission === 'denied') {
+            document.getElementById('perm-banner').style.display = 'none';
+        }
+    }
+
+    async function requestPermission() {
+        if (!("Notification" in window)) return;
+        const result = await Notification.requestPermission();
+        if (result === 'granted') {
+            document.getElementById('perm-banner').style.display = 'none';
+        }
+    }
+
+    function dispatchCallNotification(callerId) {
+        if (!("Notification" in window) || Notification.permission !== "granted") return;
+
+        const matchingContact = contacts.find(c => c.id === callerId);
+        const displayName = matchingContact ? `${matchingContact.name} (ID: ${callerId})` : `User (${callerId})`;
+        
+        // Push notification with system audio ding (defaults on mobile/iOS)
+        const notification = new Notification("Incoming P2P Call", {
+            body: `${displayName} is calling you.`,
+            tag: "p2p-incoming-call",
+            silent: false, // Dispatches native OS system ding/sound
+            requireInteraction: true
+        });
+
+        notification.onclick = function() {
+            window.focus();
+            notification.close();
+        };
+    }
+
+    // Initialize WebRTC Peers
     function initPeer() {
         peer = new Peer(APP_PREFIX + myPermanentId);
 
-        peer.on('open', (id) => {
+        peer.on('open', () => {
             updateStatus("Status: Ready to receive/make calls.");
-            requestNotificationPermission(); // Ask for push notification access on open
+            checkNotificationStatus();
+            
+            // Hide custom ringtone UI if running on iOS
+            if(isIOS) {
+                const rPanel = document.getElementById('ringtone-panel');
+                if (rPanel) rPanel.innerHTML = '<h2>Ringtone Settings</h2><p style="font-size:0.8rem;color:#94a3b8;padding:5px 0;">Your device utilizes native system sounds for call alerts.</p>';
+            }
         });
 
         peer.on('error', (err) => {
             console.error(err);
-            if(err.type === 'unavailable-id') {
-                updateStatus("ID Error: Your ID is currently occupied elsewhere.");
-            } else {
-                updateStatus("Error: " + err.type);
-            }
+            updateStatus("Connection Error: " + err.type);
         });
 
-        // Handling an Incoming Media Stream Request
+        // Receiving incoming call request
         peer.on('call', (call) => {
             incomingCallInstance = call;
             const callerId = call.peer.replace(APP_PREFIX, "");
             
-            // UI setup
-            const callerDisplayName = getContactName(callerId);
-            document.getElementById('incoming-msg').innerText = `Incoming Call from: ${callerDisplayName} (${callerId})`;
+            const matchingContact = contacts.find(c => c.id === callerId);
+            const displayLabel = matchingContact ? `${matchingContact.name} (${callerId})` : `User (${callerId})`;
+            
+            document.getElementById('incoming-msg').innerText = `Incoming Call: ${displayLabel}`;
             document.getElementById('incoming-panel').style.display = 'block';
             updateStatus("Status: Ringing...");
-            
-            // Dispatch Native Ring & System Notification
+
+            // Trigger OS Notification with System Sound
             dispatchCallNotification(callerId);
-            playRingtone(true);
+
+            // Play Web Audio Ringtones if on Android/Desktop (Ignored on iOS)
+            if (!isIOS) {
+                playPlatformRingtone();
+            }
         });
     }
 
-    // Capture Local Camera/Microphone Inputs
+    // Media Access & Calling Functions
     async function getMediaStream() {
         if (localStream) return localStream;
         try {
@@ -341,25 +383,24 @@
             document.getElementById('local-video').srcObject = localStream;
             return localStream;
         } catch (err) {
-            updateStatus("Media Error: Cannot access camera/microphone.");
+            updateStatus("Media Error: Check your camera/mic permissions.");
             throw err;
         }
     }
 
-    // Outbound Dial Strategy
     async function startCall() {
         const targetId = document.getElementById('target-id').value.trim();
         if (targetId.length !== 4 || isNaN(targetId)) {
-            alert("Please provide a valid 4-digit numeric destination ID.");
+            alert("Please provide a valid 4-digit ID.");
             return;
         }
         if (targetId === myPermanentId) {
-            alert("You cannot call your own ID!");
+            alert("You cannot call yourself.");
             return;
         }
 
         updateStatus(`Status: Dialing ${targetId}...`);
-        playRingtone(false); // Play ringback loop
+        if (!isIOS) playRingtoneSynth('classic', false); // Play outgoing call feedback on non-iOS
 
         try {
             const stream = await getMediaStream();
@@ -368,7 +409,6 @@
             currentCall = peer.call(fullPeerId, stream);
             addToHistory(targetId, "Outgoing");
 
-            // Toggle UI Buttons
             document.getElementById('btn-dial').style.display = 'none';
             document.getElementById('btn-hangup').style.display = 'block';
 
@@ -384,16 +424,15 @@
 
         } catch (err) {
             stopRingtone();
-            updateStatus("Status: Call Initiation Aborted.");
+            updateStatus("Status: Call Aborted.");
         }
     }
 
-    // Inbound Call Mechanics
     async function answerCall() {
         if (!incomingCallInstance) return;
         stopRingtone();
         document.getElementById('incoming-panel').style.display = 'none';
-        updateStatus("Status: Connecting stream...");
+        updateStatus("Status: Connecting...");
 
         try {
             const stream = await getMediaStream();
@@ -451,45 +490,126 @@
         document.getElementById('status-text').innerText = text;
     }
 
-    // Programmatic Web Audio Ringtone Synth
-    function playRingtone(isIncoming) {
+    // Non-iOS Custom Web Audio Ringtone Generator Engine
+    function playPlatformRingtone() {
+        const selection = document.getElementById('ringtone-select').value;
+        playRingtoneSynth(selection, true);
+    }
+
+    function playRingtoneSynth(style, isIncoming) {
         stopRingtone();
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         
-        const triggerTone = () => {
-            if (!audioContext) return;
-            let osc1 = audioContext.createOscillator();
-            let osc2 = audioContext.createOscillator();
-            let gainNode = audioContext.createGain();
-
-            osc1.type = 'sine';
-            osc2.type = 'sine';
+        const triggerSequence = () => {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
             
-            if (isIncoming) {
-                // Intermittent High Pitch Ring for Incoming Calls
-                osc1.frequency.setValueAtTime(440, audioContext.currentTime);
-                osc2.frequency.setValueAtTime(480, audioContext.currentTime);
-            } else {
-                // Continuous Ring-back Cadence for Outgoing calls
-                osc1.frequency.setValueAtTime(440, audioContext.currentTime);
-                osc2.frequency.setValueAtTime(480, audioContext.currentTime);
+            let osc1 = audioCtx.createOscillator();
+            let osc2 = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            
+            osc1.connect(gain);
+            osc2.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            switch(style) {
+                case 'pulse':
+                    osc1.type = 'sawtooth';
+                    osc1.frequency.setValueAtTime(150, now);
+                    osc1.frequency.exponentialRampToValueAtTime(800, now + 0.5);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
+                    osc1.start(now); osc1.stop(now + 0.5);
+                    break;
+                case 'beacon':
+                    osc1.type = 'sine';
+                    osc1.frequency.setValueAtTime(880, now);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+                    osc1.start(now); osc1.stop(now + 1.2);
+                    break;
+                case 'chirp':
+                    osc1.type = 'triangle';
+                    osc1.frequency.setValueAtTime(1200, now);
+                    osc1.frequency.exponentialRampToValueAtTime(100, now + 0.3);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                    osc1.start(now); osc1.stop(now + 0.3);
+                    break;
+                case 'melody':
+                    const notes = [261.63, 329.63, 392.00, 523.25]; // C major chord arpeggio
+                    notes.forEach((freq, idx) => {
+                        let stepOsc = audioCtx.createOscillator();
+                        let stepGain = audioCtx.createGain();
+                        stepOsc.type = 'sine';
+                        stepOsc.frequency.setValueAtTime(freq, now + (idx * 0.2));
+                        stepGain.gain.setValueAtTime(0.1, now + (idx * 0.2));
+                        stepGain.gain.exponentialRampToValueAtTime(0.001, now + (idx * 0.2) + 0.4);
+                        stepOsc.connect(stepGain);
+                        stepGain.connect(audioCtx.destination);
+                        stepOsc.start(now + (idx * 0.2));
+                        stepOsc.stop(now + (idx * 0.2) + 0.4);
+                    });
+                    break;
+                case 'siren':
+                    osc1.type = 'sine';
+                    osc1.frequency.setValueAtTime(400, now);
+                    osc1.frequency.linearRampToValueAtTime(800, now + 0.4);
+                    osc1.frequency.linearRampToValueAtTime(400, now + 0.8);
+                    gain.gain.setValueAtTime(0.12, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.8);
+                    osc1.start(now); osc1.stop(now + 0.8);
+                    break;
+                case 'digital':
+                    osc1.type = 'square';
+                    osc1.frequency.setValueAtTime(1000, now);
+                    gain.gain.setValueAtTime(0.08, now);
+                    gain.gain.setValueAtTime(0.001, now + 0.15);
+                    osc1.start(now); osc1.stop(now + 0.15);
+                    break;
+                case 'harmonic':
+                    osc1.type = 'sine'; osc2.type = 'sine';
+                    osc1.frequency.setValueAtTime(329.63, now); // E4
+                    osc2.frequency.setValueAtTime(493.88, now); // B4
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
+                    osc1.start(now); osc2.start(now);
+                    osc1.stop(now + 1.8); osc2.stop(now + 1.8);
+                    break;
+                case 'marimba':
+                    osc1.type = 'triangle';
+                    osc1.frequency.setValueAtTime(659.25, now); // E5
+                    gain.gain.setValueAtTime(0.12, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                    osc1.start(now); osc1.stop(now + 0.25);
+                    break;
+                case 'bounce':
+                    osc1.type = 'sine';
+                    osc1.frequency.setValueAtTime(300, now);
+                    osc1.frequency.setValueAtTime(600, now + 0.1);
+                    osc1.frequency.setValueAtTime(450, now + 0.2);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.setValueAtTime(0.1, now + 0.1);
+                    gain.gain.setValueAtTime(0.1, now + 0.2);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+                    osc1.start(now); osc1.stop(now + 0.45);
+                    break;
+                case 'classic':
+                default:
+                    // Classic dual-frequency US telephone cadence
+                    osc1.type = 'sine'; osc2.type = 'sine';
+                    osc1.frequency.setValueAtTime(440, now);
+                    osc2.frequency.setValueAtTime(480, now);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+                    osc1.start(now); osc2.start(now);
+                    osc1.stop(now + 1.2); osc2.stop(now + 1.2);
+                    break;
             }
-
-            gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + (isIncoming ? 1.2 : 1.8));
-
-            osc1.connect(gainNode);
-            osc2.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-
-            osc1.start();
-            osc2.start();
-            osc1.stop(audioContext.currentTime + (isIncoming ? 1.2 : 1.8));
-            osc2.stop(audioContext.currentTime + (isIncoming ? 1.2 : 1.8));
         };
 
-        triggerTone();
-        ringtoneInterval = setInterval(triggerTone, isIncoming ? 2500 : 4000);
+        triggerSequence();
+        ringtoneInterval = setInterval(triggerSequence, isIncoming ? 2200 : 3800);
     }
 
     function stopRingtone() {
@@ -497,19 +617,19 @@
             clearInterval(ringtoneInterval);
             ringtoneInterval = null;
         }
-        if (audioContext) {
-            audioContext.close();
-            audioContext = null;
+        if (audioCtx) {
+            audioCtx.close().catch(() => {});
+            audioCtx = null;
         }
     }
 
-    // Contacts & History System (Persistence)
+    // Contacts & Call History Mechanics
     function addContact() {
         const name = document.getElementById('contact-name').value.trim();
         const id = document.getElementById('contact-id').value.trim();
 
         if(!name || id.length !== 4 || isNaN(id)) {
-            alert("Provide a clean display name and a 4-digit ID.");
+            alert("Give a valid name and a 4-digit numeric ID.");
             return;
         }
 
@@ -538,14 +658,14 @@
         const displayName = matchingContact ? `${matchingContact.name} (${id})` : `ID: ${id}`;
         
         callHistory.unshift({ displayName, type, time });
-        if (callHistory.length > 20) callHistory.pop(); // Cap history
+        if (callHistory.length > 20) callHistory.pop(); 
         localStorage.setItem('phone_history', JSON.stringify(callHistory));
         renderHistory();
     }
 
     function renderContacts() {
         const container = document.getElementById('contacts-list');
-        container.innerHTML = contacts.length === 0 ? '<div style="font-size:0.85rem;color:#64748b;">No contacts saved.</div>' : '';
+        container.innerHTML = contacts.length === 0 ? '<div style="font-size:0.8rem;color:#64748b;">No contacts saved.</div>' : '';
         contacts.forEach((c, index) => {
             container.innerHTML += `
                 <div class="list-item">
@@ -560,17 +680,16 @@
 
     function renderHistory() {
         const container = document.getElementById('history-list');
-        container.innerHTML = callHistory.length === 0 ? '<div style="font-size:0.85rem;color:#64748b;">No recent activity logs.</div>' : '';
+        container.innerHTML = callHistory.length === 0 ? '<div style="font-size:0.8rem;color:#64748b;">No recent activity.</div>' : '';
         callHistory.forEach(h => {
             container.innerHTML += `
                 <div class="list-item">
                     <span>${h.displayName} <br><small style="color:#64748b;">${h.type}</small></span>
-                    <span style="font-size:0.8rem; color:#94a3b8;">${h.time}</span>
+                    <span style="font-size:0.75rem; color:#94a3b8;">${h.time}</span>
                 </div>`;
         });
     }
 
-    // App Initialization
     initPeer();
     renderContacts();
     renderHistory();
