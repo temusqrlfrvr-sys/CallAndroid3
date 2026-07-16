@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P WebRTC Online Calling System</title>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --success: #16a34a;
+            --danger: #dc2626;
+            --dark: #1f2937;
+            --light: #f3f4f6;
+            /* Dynamic scale factor calculated by JS */
+            --scale-factor: 1; 
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+        body { 
+            background-color: #0f172a; 
+            color: #f8fafc; 
+            padding: calc(20px * var(--scale-factor)); 
+            display: flex; 
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+        
+        .container { 
+            width: 100%; 
+            max-width: 1000px; 
+            background: #1e293b; 
+            padding: calc(25px * var(--scale-factor)); 
+            border-radius: calc(12px * var(--scale-factor)); 
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); 
+            transition: all 0.2s ease-out;
+        }
+        
+        header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            border-bottom: 1px solid #334155; 
+            padding-bottom: calc(15px * var(--scale-factor)); 
+            margin-bottom: calc(20px * var(--scale-factor)); 
+        }
+        h1 { font-size: calc(1.5rem * var(--scale-factor)); color: #38bdf8; }
+        
+        .id-badge { 
+            background: #334155; 
+            padding: calc(8px * var(--scale-factor)) calc(15px * var(--scale-factor)); 
+            border-radius: 20px; 
+            font-weight: bold; 
+            font-size: calc(0.95rem * var(--scale-factor)); 
+        }
+        .id-num { color: #f43f5e; letter-spacing: 1px; }
+
+        .main-layout { 
+            display: grid; 
+            grid-template-columns: 1.2fr 1fr; 
+            gap: calc(20px * var(--scale-factor)); 
+        }
+        
+        /* Mobile Portrait & Small Screens optimization */
+        @media(max-width: 768px) { 
+            .main-layout { grid-template-columns: 1fr; } 
+        }
+
+        .panel { 
+            background: #111827; 
+            padding: calc(15px * var(--scale-factor)); 
+            border-radius: calc(8px * var(--scale-factor)); 
+            border: 1px solid #334155; 
+            margin-bottom: calc(15px * var(--scale-factor));
+        }
+        h2 { 
+            font-size: calc(1.1rem * var(--scale-factor)); 
+            margin-bottom: calc(15px * var(--scale-factor)); 
+            color: #94a3b8; 
+            border-bottom: 1px solid #1f2937; 
+            padding-bottom: calc(5px * var(--scale-factor)); 
+        }
+
+        input, button, select { 
+            width: 100%; 
+            padding: calc(10px * var(--scale-factor)); 
+            margin-bottom: calc(10px * var(--scale-factor)); 
+            border-radius: calc(6px * var(--scale-factor)); 
+            font-size: calc(0.95rem * var(--scale-factor));
+            border: none; 
+            outline: none; 
+        }
+        input, select { background: #1f2937; color: white; border: 1px solid #475569; }
+        button { background: var(--primary); color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:hover { background: var(--primary-hover); }
+        
+        .btn-call { background: var(--success); }
+        .btn-call:hover { background: #15803d; }
+        .btn-hangup { background: var(--danger); display: none; }
+        .btn-hangup:hover { background: #b91c1c; }
+
+        .list-container { 
+            max-height: calc(180px * var(--scale-factor)); 
+            overflow-y: auto; 
+            margin-top: calc(10px * var(--scale-factor)); 
+        }
+        .list-item { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            background: #1f2937; 
+            padding: calc(8px * var(--scale-factor)) calc(12px * var(--scale-factor)); 
+            margin-bottom: calc(6px * var(--scale-factor)); 
+            border-radius: calc(4px * var(--scale-factor)); 
+            font-size: calc(0.9rem * var(--scale-factor)); 
+        }
+        .list-item button { width: auto; margin: 0; padding: 4px 10px; font-size: calc(0.8rem * var(--scale-factor)); }
+
+        /* Resizing video panel box */
+        .video-box { 
+            text-align: center; 
+            margin-bottom: calc(15px * var(--scale-factor)); 
+            background: #000; 
+            border-radius: calc(8px * var(--scale-factor)); 
+            overflow: hidden; 
+            position: relative; 
+            height: calc(240px * var(--scale-factor)); 
+        }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        .local-video-small { 
+            position: absolute; 
+            bottom: 10px; 
+            right: 10px; 
+            width: calc(80px * var(--scale-factor)); 
+            height: calc(60px * var(--scale-factor)); 
+            border: 2px solid white; 
+            border-radius: 4px; 
+            z-index: 10; 
+        }
+        
+        .status-bar { 
+            text-align: center; 
+            padding: calc(8px * var(--scale-factor)); 
+            margin-bottom: calc(15px * var(--scale-factor)); 
+            border-radius: calc(6px * var(--scale-factor)); 
+            font-weight: bold; 
+            background: #334155; 
+            font-size: calc(0.9rem * var(--scale-factor)); 
+        }
+        .incoming-ui { 
+            display: none; 
+            background: #2e1065; 
+            padding: calc(15px * var(--scale-factor)); 
+            border-radius: calc(8px * var(--scale-factor)); 
+            margin-bottom: calc(15px * var(--scale-factor)); 
+            text-align: center; 
+            border: 1px solid #7c3aed; 
+        }
+        .incoming-ui div { margin-bottom: calc(10px * var(--scale-factor)); font-weight: bold; }
+        .inc-buttons { display: flex; gap: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container" id="app-container">
+    <header>
+        <h1>P2P WebRTC Phone</h1>
+        <div class="id-badge">Your ID: <span id="my-id-display" class="id-num">Initializing...</span></div>
+    </header>
+
+    <div class="incoming-ui" id="incoming-panel">
+        <div id="incoming-msg">Incoming Call from 0000...</div>
+        <div class="inc-buttons">
+            <button class="btn-call" onclick="answerCall()">Answer</button>
+            <button class="btn-hangup" style="display:inline-block;" onclick="rejectCall()">Decline</button>
+        </div>
+    </div>
+
+    <div class="status-bar" id="status-text">Status: Setting up signaling stream...</div>
+
+    <div class="main-layout">
+        <div>
+            <div class="video-box" id="video-container">
+                <video id="remote-video" autoplay playsinline></video>
+                <video id="local-video" class="local-video-small" autoplay playsinline muted></video>
+            </div>
+
+            <div class="panel">
+                <h2>Make a Call</h2>
+                <input type="text" id="target-id" placeholder="Enter 4-Digit ID to Call" maxlength="4">
+                <button class="btn-call" id="btn-dial" onclick="startCall()">Dial</button>
+                <button class="btn-hangup" id="btn-hangup" onclick="hangUp()">Hang Up</button>
+            </div>
+        </div>
+
+        <div>
+            <div class="panel">
+                <h2>Add Contact</h2>
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" id="contact-name" placeholder="Name" style="flex: 2;">
+                    <input type="text" id="contact-id" placeholder="4-Digit ID" maxlength="4" style="flex: 1;">
+                </div>
+                <button onclick="addContact()">Save Contact</button>
+                
+                <div class="list-container" id="contacts-list"></div>
+            </div>
+
+            <div class="panel">
+                <h2>Call History</h2>
+                <div class="list-container" id="history-list"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // System Constants & App Namespace Prefix
+    const APP_PREFIX = "rtc-call-sys-";
+    
+    let peer;
+    let localStream;
+    let currentCall = null;
+    let incomingCallInstance = null;
+    let audioContext = null;
+    let ringtoneInterval = null;
+
+    // --- Dynamic Resizing Agent ---
+    // Calculates a dynamic scaling factor based on the browser window size
+    function resizeAgent() {
+        const width = window.innerWidth;
+        let scale = 1;
+        
+        if (width < 480) {
+            scale = 0.82; // Compact UI for small mobile phones
+        } else if (width >= 480 && width < 768) {
+            scale = 0.9;  // Medium-sized mobile & small tablets
+        } else if (width >= 768 && width < 1024) {
+            scale = 0.95; // Tablets & small laptop screens
+        } else {
+            scale = 1.05; // Larger displays
+        }
+        
+        document.documentElement.style.setProperty('--scale-factor', scale);
+    }
+    
+    window.addEventListener('resize', resizeAgent);
+    window.addEventListener('DOMContentLoaded', resizeAgent);
+
+    // --- Notification Permissions Setup ---
+    function requestNotificationPermission() {
+        if ("Notification" in window) {
+            if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+                Notification.requestPermission();
+            }
+        }
+    }
+
+    // Sends system-level notification (triggers a "ding" sound on iOS/macOS/Android natively)
+    function dispatchCallNotification(callerId) {
+        if ("Notification" in window && Notification.permission === "granted") {
+            const contactName = getContactName(callerId);
+            const title = "Incoming P2P Call";
+            const options = {
+                body: `${contactName} (ID: ${callerId}) is calling you...`,
+                tag: 'incoming-p2p-call', // Overwrite old calls
+                requireInteraction: true,  // Keeps notification visible
+                silent: false              // Allows device system sound (ding on iOS)
+            };
+            
+            try {
+                new Notification(title, options);
+            } catch (e) {
+                // Support background service workers if registered in future extensions
+                navigator.serviceWorker?.ready.then(registration => {
+                    registration.showNotification(title, options);
+                });
+            }
+        }
+    }
+
+    // Help resolve Caller ID to saved Contact Names for UI/Notifications
+    function getContactName(id) {
+        const found = contacts.find(c => c.id === id);
+        return found ? found.name : "Unknown Caller";
+    }
+
+    // Load or generate a permanent 4-digit ID
+    let myPermanentId = localStorage.getItem('phone_p2p_id');
+    if (!myPermanentId) {
+        myPermanentId = Math.floor(1000 + Math.random() * 9000).toString();
+        localStorage.setItem('phone_p2p_id', myPermanentId);
+    }
+    document.getElementById('my-id-display').innerText = myPermanentId;
+
+    // Initialize lists from localStorage
+    let contacts = JSON.parse(localStorage.getItem('phone_contacts')) || [];
+    let callHistory = JSON.parse(localStorage.getItem('phone_history')) || [];
+
+    // Initialize PeerJS Connection
+    function initPeer() {
+        peer = new Peer(APP_PREFIX + myPermanentId);
+
+        peer.on('open', (id) => {
+            updateStatus("Status: Ready to receive/make calls.");
+            requestNotificationPermission(); // Ask for push notification access on open
+        });
+
+        peer.on('error', (err) => {
+            console.error(err);
+            if(err.type === 'unavailable-id') {
+                updateStatus("ID Error: Your ID is currently occupied elsewhere.");
+            } else {
+                updateStatus("Error: " + err.type);
+            }
+        });
+
+        // Handling an Incoming Media Stream Request
+        peer.on('call', (call) => {
+            incomingCallInstance = call;
+            const callerId = call.peer.replace(APP_PREFIX, "");
+            
+            // UI setup
+            const callerDisplayName = getContactName(callerId);
+            document.getElementById('incoming-msg').innerText = `Incoming Call from: ${callerDisplayName} (${callerId})`;
+            document.getElementById('incoming-panel').style.display = 'block';
+            updateStatus("Status: Ringing...");
+            
+            // Dispatch Native Ring & System Notification
+            dispatchCallNotification(callerId);
+            playRingtone(true);
+        });
+    }
+
+    // Capture Local Camera/Microphone Inputs
+    async function getMediaStream() {
+        if (localStream) return localStream;
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('local-video').srcObject = localStream;
+            return localStream;
+        } catch (err) {
+            updateStatus("Media Error: Cannot access camera/microphone.");
+            throw err;
+        }
+    }
+
+    // Outbound Dial Strategy
+    async function startCall() {
+        const targetId = document.getElementById('target-id').value.trim();
+        if (targetId.length !== 4 || isNaN(targetId)) {
+            alert("Please provide a valid 4-digit numeric destination ID.");
+            return;
+        }
+        if (targetId === myPermanentId) {
+            alert("You cannot call your own ID!");
+            return;
+        }
+
+        updateStatus(`Status: Dialing ${targetId}...`);
+        playRingtone(false); // Play ringback loop
+
+        try {
+            const stream = await getMediaStream();
+            const fullPeerId = APP_PREFIX + targetId;
+            
+            currentCall = peer.call(fullPeerId, stream);
+            addToHistory(targetId, "Outgoing");
+
+            // Toggle UI Buttons
+            document.getElementById('btn-dial').style.display = 'none';
+            document.getElementById('btn-hangup').style.display = 'block';
+
+            currentCall.on('stream', (remoteStream) => {
+                stopRingtone();
+                updateStatus("Status: Connected");
+                document.getElementById('remote-video').srcObject = remoteStream;
+            });
+
+            currentCall.on('close', () => {
+                handleCallCleanup();
+            });
+
+        } catch (err) {
+            stopRingtone();
+            updateStatus("Status: Call Initiation Aborted.");
+        }
+    }
+
+    // Inbound Call Mechanics
+    async function answerCall() {
+        if (!incomingCallInstance) return;
+        stopRingtone();
+        document.getElementById('incoming-panel').style.display = 'none';
+        updateStatus("Status: Connecting stream...");
+
+        try {
+            const stream = await getMediaStream();
+            incomingCallInstance.answer(stream);
+            currentCall = incomingCallInstance;
+            
+            const callerId = currentCall.peer.replace(APP_PREFIX, "");
+            addToHistory(callerId, "Incoming (Answered)");
+
+            document.getElementById('btn-dial').style.display = 'none';
+            document.getElementById('btn-hangup').style.display = 'block';
+
+            currentCall.on('stream', (remoteStream) => {
+                updateStatus("Status: Connected");
+                document.getElementById('remote-video').srcObject = remoteStream;
+            });
+
+            currentCall.on('close', () => {
+                handleCallCleanup();
+            });
+        } catch (err) {
+            handleCallCleanup();
+        }
+    }
+
+    function rejectCall() {
+        if (incomingCallInstance) {
+            const callerId = incomingCallInstance.peer.replace(APP_PREFIX, "");
+            addToHistory(callerId, "Missed / Rejected");
+            incomingCallInstance.close();
+        }
+        stopRingtone();
+        document.getElementById('incoming-panel').style.display = 'none';
+        updateStatus("Status: Ready to receive/make calls.");
+    }
+
+    function hangUp() {
+        if (currentCall) currentCall.close();
+        handleCallCleanup();
+    }
+
+    function handleCallCleanup() {
+        stopRingtone();
+        if (currentCall) currentCall = null;
+        incomingCallInstance = null;
+        
+        document.getElementById('remote-video').srcObject = null;
+        document.getElementById('btn-dial').style.display = 'block';
+        document.getElementById('btn-hangup').style.display = 'none';
+        document.getElementById('incoming-panel').style.display = 'none';
+        updateStatus("Status: Call Ended.");
+    }
+
+    function updateStatus(text) {
+        document.getElementById('status-text').innerText = text;
+    }
+
+    // Programmatic Web Audio Ringtone Synth
+    function playRingtone(isIncoming) {
+        stopRingtone();
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        const triggerTone = () => {
+            if (!audioContext) return;
+            let osc1 = audioContext.createOscillator();
+            let osc2 = audioContext.createOscillator();
+            let gainNode = audioContext.createGain();
+
+            osc1.type = 'sine';
+            osc2.type = 'sine';
+            
+            if (isIncoming) {
+                // Intermittent High Pitch Ring for Incoming Calls
+                osc1.frequency.setValueAtTime(440, audioContext.currentTime);
+                osc2.frequency.setValueAtTime(480, audioContext.currentTime);
+            } else {
+                // Continuous Ring-back Cadence for Outgoing calls
+                osc1.frequency.setValueAtTime(440, audioContext.currentTime);
+                osc2.frequency.setValueAtTime(480, audioContext.currentTime);
+            }
+
+            gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + (isIncoming ? 1.2 : 1.8));
+
+            osc1.connect(gainNode);
+            osc2.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            osc1.start();
+            osc2.start();
+            osc1.stop(audioContext.currentTime + (isIncoming ? 1.2 : 1.8));
+            osc2.stop(audioContext.currentTime + (isIncoming ? 1.2 : 1.8));
+        };
+
+        triggerTone();
+        ringtoneInterval = setInterval(triggerTone, isIncoming ? 2500 : 4000);
+    }
+
+    function stopRingtone() {
+        if (ringtoneInterval) {
+            clearInterval(ringtoneInterval);
+            ringtoneInterval = null;
+        }
+        if (audioContext) {
+            audioContext.close();
+            audioContext = null;
+        }
+    }
+
+    // Contacts & History System (Persistence)
+    function addContact() {
+        const name = document.getElementById('contact-name').value.trim();
+        const id = document.getElementById('contact-id').value.trim();
+
+        if(!name || id.length !== 4 || isNaN(id)) {
+            alert("Provide a clean display name and a 4-digit ID.");
+            return;
+        }
+
+        contacts.push({ name, id });
+        localStorage.setItem('phone_contacts', JSON.stringify(contacts));
+        
+        document.getElementById('contact-name').value = '';
+        document.getElementById('contact-id').value = '';
+        renderContacts();
+    }
+
+    function removeContact(index) {
+        contacts.splice(index, 1);
+        localStorage.setItem('phone_contacts', JSON.stringify(contacts));
+        renderContacts();
+    }
+
+    function quickDial(id) {
+        document.getElementById('target-id').value = id;
+        startCall();
+    }
+
+    function addToHistory(id, type) {
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const matchingContact = contacts.find(c => c.id === id);
+        const displayName = matchingContact ? `${matchingContact.name} (${id})` : `ID: ${id}`;
+        
+        callHistory.unshift({ displayName, type, time });
+        if (callHistory.length > 20) callHistory.pop(); // Cap history
+        localStorage.setItem('phone_history', JSON.stringify(callHistory));
+        renderHistory();
+    }
+
+    function renderContacts() {
+        const container = document.getElementById('contacts-list');
+        container.innerHTML = contacts.length === 0 ? '<div style="font-size:0.85rem;color:#64748b;">No contacts saved.</div>' : '';
+        contacts.forEach((c, index) => {
+            container.innerHTML += `
+                <div class="list-item">
+                    <span><strong>${c.name}</strong> (${c.id})</span>
+                    <div style="display: flex; gap: 5px;">
+                        <button class="btn-call" onclick="quickDial('${c.id}')">Call</button>
+                        <button class="btn-hangup" style="display:inline-block; padding: 4px 8px;" onclick="removeContact(${index})">X</button>
+                    </div>
+                </div>`;
+        });
+    }
+
+    function renderHistory() {
+        const container = document.getElementById('history-list');
+        container.innerHTML = callHistory.length === 0 ? '<div style="font-size:0.85rem;color:#64748b;">No recent activity logs.</div>' : '';
+        callHistory.forEach(h => {
+            container.innerHTML += `
+                <div class="list-item">
+                    <span>${h.displayName} <br><small style="color:#64748b;">${h.type}</small></span>
+                    <span style="font-size:0.8rem; color:#94a3b8;">${h.time}</span>
+                </div>`;
+        });
+    }
+
+    // App Initialization
+    initPeer();
+    renderContacts();
+    renderHistory();
+</script>
+</body>
+</html>
