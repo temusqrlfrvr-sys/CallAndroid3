@@ -13,7 +13,7 @@
             --danger: #dc2626;
             --dark: #111827;
             --light: #f3f4f6;
-            --scale-factor: 1; /* Scaled dynamically by the resize agent */
+            --scale-factor: 1; /* Recalculated dynamically by the resize agent */
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
@@ -189,7 +189,7 @@
     </header>
 
     <div class="permission-banner" id="perm-banner">
-        <span>Enable desktop and mobile notifications to receive calls when in background.</span>
+        <span>Enable system-level notifications to receive calls while backgrounded.</span>
         <button class="btn-perm" onclick="requestPermission()">Allow Notifications</button>
     </div>
 
@@ -219,7 +219,7 @@
             
             <div class="panel" id="ringtone-panel">
                 <h2>Ringtone Settings (Android & Desktop Only)</h2>
-                <label for="ringtone-select">Choose Sound Profile</label>
+                <label for="ringtone-select">Choose Custom Soundscape</label>
                 <select id="ringtone-select">
                     <option value="classic">Retro Telephone Ring</option>
                     <option value="pulse">Space Pulsar</option>
@@ -258,17 +258,18 @@
 <script>
     const APP_PREFIX = "rtc-call-sys-";
     
-    let peer;
-    let localStream;
+    let peer = null;
+    let localStream = null;
     let currentCall = null;
     let incomingCallInstance = null;
     let audioCtx = null;
     let ringtoneInterval = null;
 
-    // Detect Apple device (iOS/macOS browser stack)
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    // Direct platform query logic
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
-    // Dynamic Scaling Handler
+    // --- Dynamic Resizing Agent ---
     function runResizeAgent() {
         const w = window.innerWidth;
         let scale = 1.0;
@@ -286,7 +287,7 @@
     window.addEventListener('resize', runResizeAgent);
     window.addEventListener('DOMContentLoaded', runResizeAgent);
 
-    // Storage and Device Identity
+    // --- Persisted Storage ---
     let myPermanentId = localStorage.getItem('phone_p2p_id') || Math.floor(1000 + Math.random() * 9000).toString();
     localStorage.setItem('phone_p2p_id', myPermanentId);
     document.getElementById('my-id-display').innerText = myPermanentId;
@@ -294,7 +295,7 @@
     let contacts = JSON.parse(localStorage.getItem('phone_contacts')) || [];
     let callHistory = JSON.parse(localStorage.getItem('phone_history')) || [];
 
-    // Notification Access Gatekeeper
+    // --- Notification Permissions Engine ---
     function checkNotificationStatus() {
         if (!("Notification" in window)) {
             document.getElementById('perm-banner').style.display = 'none';
@@ -307,23 +308,28 @@
 
     async function requestPermission() {
         if (!("Notification" in window)) return;
-        const result = await Notification.requestPermission();
-        if (result === 'granted') {
-            document.getElementById('perm-banner').style.display = 'none';
+        try {
+            const result = await Notification.requestPermission();
+            if (result === 'granted') {
+                document.getElementById('perm-banner').style.display = 'none';
+            }
+        } catch (e) {
+            console.error("Notification permission request failed", e);
         }
     }
 
+    // Resolves contact identity and pushes system ding alert
     function dispatchCallNotification(callerId) {
         if (!("Notification" in window) || Notification.permission !== "granted") return;
 
         const matchingContact = contacts.find(c => c.id === callerId);
+        // Custom requirements rule: "User (ID) is calling you" or "Contact Name (ID) is calling you"
         const displayName = matchingContact ? `${matchingContact.name} (ID: ${callerId})` : `User (${callerId})`;
         
-        // Push notification with system audio ding (defaults on mobile/iOS)
         const notification = new Notification("Incoming P2P Call", {
             body: `${displayName} is calling you.`,
             tag: "p2p-incoming-call",
-            silent: false, // Dispatches native OS system ding/sound
+            silent: false, // Requests standard system audio alert (native ding)
             requireInteraction: true
         });
 
@@ -333,7 +339,7 @@
         };
     }
 
-    // Initialize WebRTC Peers
+    // --- PeerJS Protocol Integration ---
     function initPeer() {
         peer = new Peer(APP_PREFIX + myPermanentId);
 
@@ -341,20 +347,35 @@
             updateStatus("Status: Ready to receive/make calls.");
             checkNotificationStatus();
             
-            // Hide custom ringtone UI if running on iOS
-            if(isIOS) {
+            // Reconfigure sound setup if platform is iOS
+            if (isIOS) {
                 const rPanel = document.getElementById('ringtone-panel');
-                if (rPanel) rPanel.innerHTML = '<h2>Ringtone Settings</h2><p style="font-size:0.8rem;color:#94a3b8;padding:5px 0;">Your device utilizes native system sounds for call alerts.</p>';
+                if (rPanel) {
+                    rPanel.innerHTML = '<h2>Ringtone Settings</h2><p style="font-size:0.8rem;color:#94a3b8;padding:5px 0;">Standard system sounds are used for iOS alerts.</p>';
+                }
             }
         });
 
         peer.on('error', (err) => {
             console.error(err);
-            updateStatus("Connection Error: " + err.type);
+            if (err.type === 'peer-unavailable') {
+                updateStatus("Error: Target ID is offline or busy.");
+                handleCallCleanup();
+            } else if (err.type === 'unavailable-id') {
+                updateStatus("ID Error: Your ID is currently in use elsewhere.");
+            } else {
+                updateStatus("System Error: " + err.type);
+            }
         });
 
-        // Receiving incoming call request
         peer.on('call', (call) => {
+            // Prevent taking calls while already in an active session
+            if (currentCall || incomingCallInstance) {
+                call.answer();
+                setTimeout(() => call.close(), 500);
+                return;
+            }
+
             incomingCallInstance = call;
             const callerId = call.peer.replace(APP_PREFIX, "");
             
@@ -365,17 +386,16 @@
             document.getElementById('incoming-panel').style.display = 'block';
             updateStatus("Status: Ringing...");
 
-            // Trigger OS Notification with System Sound
             dispatchCallNotification(callerId);
 
-            // Play Web Audio Ringtones if on Android/Desktop (Ignored on iOS)
+            // Execute custom synth only if device is NOT iOS
             if (!isIOS) {
                 playPlatformRingtone();
             }
         });
     }
 
-    // Media Access & Calling Functions
+    // --- Media Hardware Access ---
     async function getMediaStream() {
         if (localStream) return localStream;
         try {
@@ -383,24 +403,27 @@
             document.getElementById('local-video').srcObject = localStream;
             return localStream;
         } catch (err) {
-            updateStatus("Media Error: Check your camera/mic permissions.");
+            updateStatus("Media Error: Cannot open camera/microphone hardware.");
             throw err;
         }
     }
 
+    // --- Outbound Calling Execution ---
     async function startCall() {
         const targetId = document.getElementById('target-id').value.trim();
         if (targetId.length !== 4 || isNaN(targetId)) {
-            alert("Please provide a valid 4-digit ID.");
+            alert("Please enter a valid 4-digit numeric ID.");
             return;
         }
         if (targetId === myPermanentId) {
-            alert("You cannot call yourself.");
+            alert("You cannot call your own device.");
             return;
         }
 
         updateStatus(`Status: Dialing ${targetId}...`);
-        if (!isIOS) playRingtoneSynth('classic', false); // Play outgoing call feedback on non-iOS
+        
+        // Play dial tone for caller (if not on iOS)
+        if (!isIOS) playRingtoneSynth('classic', false);
 
         try {
             const stream = await getMediaStream();
@@ -428,11 +451,12 @@
         }
     }
 
+    // --- Inbound Call Interaction ---
     async function answerCall() {
         if (!incomingCallInstance) return;
         stopRingtone();
         document.getElementById('incoming-panel').style.display = 'none';
-        updateStatus("Status: Connecting...");
+        updateStatus("Status: Connecting stream...");
 
         try {
             const stream = await getMediaStream();
@@ -476,7 +500,10 @@
 
     function handleCallCleanup() {
         stopRingtone();
-        if (currentCall) currentCall = null;
+        if (currentCall) {
+            currentCall.close();
+            currentCall = null;
+        }
         incomingCallInstance = null;
         
         document.getElementById('remote-video').srcObject = null;
@@ -490,7 +517,7 @@
         document.getElementById('status-text').innerText = text;
     }
 
-    // Non-iOS Custom Web Audio Ringtone Generator Engine
+    // --- Custom Synthesizer Engine (Web Audio API) ---
     function playPlatformRingtone() {
         const selection = document.getElementById('ringtone-select').value;
         playRingtoneSynth(selection, true);
@@ -537,18 +564,18 @@
                     osc1.start(now); osc1.stop(now + 0.3);
                     break;
                 case 'melody':
-                    const notes = [261.63, 329.63, 392.00, 523.25]; // C major chord arpeggio
+                    const notes = [261.63, 329.63, 392.00, 523.25]; // C major chord step
                     notes.forEach((freq, idx) => {
                         let stepOsc = audioCtx.createOscillator();
                         let stepGain = audioCtx.createGain();
                         stepOsc.type = 'sine';
-                        stepOsc.frequency.setValueAtTime(freq, now + (idx * 0.2));
-                        stepGain.gain.setValueAtTime(0.1, now + (idx * 0.2));
-                        stepGain.gain.exponentialRampToValueAtTime(0.001, now + (idx * 0.2) + 0.4);
+                        stepOsc.frequency.setValueAtTime(freq, now + (idx * 0.18));
+                        stepGain.gain.setValueAtTime(0.1, now + (idx * 0.18));
+                        stepGain.gain.exponentialRampToValueAtTime(0.001, now + (idx * 0.18) + 0.35);
                         stepOsc.connect(stepGain);
                         stepGain.connect(audioCtx.destination);
-                        stepOsc.start(now + (idx * 0.2));
-                        stepOsc.stop(now + (idx * 0.2) + 0.4);
+                        stepOsc.start(now + (idx * 0.18));
+                        stepOsc.stop(now + (idx * 0.18) + 0.35);
                     });
                     break;
                 case 'siren':
@@ -596,7 +623,6 @@
                     break;
                 case 'classic':
                 default:
-                    // Classic dual-frequency US telephone cadence
                     osc1.type = 'sine'; osc2.type = 'sine';
                     osc1.frequency.setValueAtTime(440, now);
                     osc2.frequency.setValueAtTime(480, now);
@@ -623,13 +649,13 @@
         }
     }
 
-    // Contacts & Call History Mechanics
+    // --- Storage Interface Functions ---
     function addContact() {
         const name = document.getElementById('contact-name').value.trim();
         const id = document.getElementById('contact-id').value.trim();
 
         if(!name || id.length !== 4 || isNaN(id)) {
-            alert("Give a valid name and a 4-digit numeric ID.");
+            alert("Please enter a valid name and a 4-digit ID.");
             return;
         }
 
@@ -690,6 +716,7 @@
         });
     }
 
+    // --- Init ---
     initPeer();
     renderContacts();
     renderHistory();
